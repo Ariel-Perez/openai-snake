@@ -51,13 +51,13 @@ class SnakeEnv(gym.Env):
         Board.SNAKE_HEAD: colorize('o', 'green')
     }
 
-    def __init__(self, width=80, height=60):
+    def __init__(self, width=80, height=20):
         """Initialize the SnakeEnv with a given size."""
         self.width = width
         self.height = height
 
         # Space of observed data: a grid with values as specified by Board Enum
-        self.observation_space = Box(low=0.0, high=3.0, shape=(width, height))
+        self.observation_space = Box(low=0.0, high=3.0, shape=(height, width))
 
         # Space of possible actions as specified by Directions Enum
         self.action_space = Discrete(4)
@@ -71,7 +71,7 @@ class SnakeEnv(gym.Env):
 
     def _get_obs(self):
         """Get the current observation."""
-        board = np.full((self.width, self.height), fill_value=Board.BLANK)
+        board = np.full((self.height, self.width), fill_value=Board.BLANK)
         board[self.fruit] = Board.FRUIT
         board[self.snake[0]] = Board.SNAKE_HEAD
         for position in self.snake[1:]:
@@ -81,23 +81,23 @@ class SnakeEnv(gym.Env):
 
     def _step(self, action):
         """Act on a given action."""
-        direction = action[0]
+        direction = action
         if direction == Direction.UP:
-            new_position = self.snake[0][0], self.snake[0][1] - 1
-        elif direction == Direction.DOWN:
-            new_position = self.snake[0][0], self.snake[0][1] + 1
-        elif direction == Direction.LEFT:
             new_position = self.snake[0][0] - 1, self.snake[0][1]
-        elif direction == Direction.RIGHT:
+        elif direction == Direction.DOWN:
             new_position = self.snake[0][0] + 1, self.snake[0][1]
+        elif direction == Direction.LEFT:
+            new_position = self.snake[0][0], self.snake[0][1] - 1
+        elif direction == Direction.RIGHT:
+            new_position = self.snake[0][0], self.snake[0][1] + 1
         else:
             raise ValueError("Invalid action!")
 
         collision = (
             new_position[0] < 0
-            or new_position[0] >= self.width
+            or new_position[0] >= self.height
             or new_position[1] < 0
-            or new_position[1] >= self.height
+            or new_position[1] >= self.width
             or new_position in self.snake)
 
         done = collision
@@ -106,7 +106,11 @@ class SnakeEnv(gym.Env):
         reward = int(eat)
 
         if not collision:
-            self.snake = [new_position] + (self.snake if eat else self.snake[:-1])
+            self.void.remove(new_position)
+            if not eat:
+                self.void.add(self.snake.pop())
+
+            self.snake = [new_position] + self.snake
 
         self.fruit = self.place_fruit() if eat else self.fruit
 
@@ -116,16 +120,28 @@ class SnakeEnv(gym.Env):
         obs = self._get_obs()
         return (obs, reward, done, {})
 
-    def render(self, mode='human'):
+    def _border(self, rows):
+        """Add borders to the rows to print."""
+        horizontal_border = ["|:" + "=" * (self.width - 2) + ":|"]
+        rows_with_border = ["|%s|" % row for row in rows]
+        return horizontal_border + rows_with_border + horizontal_border
+
+    def render(self, mode='human', close=False):
         """Render the current observation with [0, 0] as the top-left corner."""
+        if close:
+            return
+
         outfile = StringIO() if mode == 'ansi' else sys.stdout
 
         out = self._get_obs().tolist()
         out = [[self.COLOR_MAPPING[c] for c in line] for line in out]
 
-        outfile.write("\n".join(["".join(row) for row in out])+"\n")
+        clear = "\n" * 100
+        outfile.write(clear + "\n".join(
+            self._border(["".join(row) for row in out])) + "\n")
         if self.lastaction is not None:
-            outfile.write("  ({})\n".format(Board[self.lastaction]))
+            outfile.write("  ({})\n".format(
+                Direction(self.lastaction).name))
         else: outfile.write("\n")
 
         # No need to return anything for human
@@ -144,13 +160,13 @@ class SnakeEnv(gym.Env):
         Rewards and valuations are reset.
         """
         self.snake = [
-            (self.np_random.randint(self.width),
-             self.np_random.randint(self.height))
+            (self.np_random.randint(self.height),
+             self.np_random.randint(self.width))
         ]
 
         self.void = {
             (x, y) for x, y in
-            itertools.product(range(self.width), range(self.height))
+            itertools.product(range(self.height), range(self.width))
             if (x, y) not in self.snake
         }
 
