@@ -51,13 +51,13 @@ class SnakeEnv(gym.Env):
         Board.SNAKE_HEAD: colorize('o', 'green')
     }
 
-    def __init__(self, width=80, height=20):
+    def __init__(self, width=40, height=20):
         """Initialize the SnakeEnv with a given size."""
         self.width = width
         self.height = height
 
         # Space of observed data: a grid with values as specified by Board Enum
-        self.observation_space = Box(low=0.0, high=3.0, shape=(height, width))
+        self.observation_space = Box(low=0.0, high=3.0, shape=(height, width, 1))
 
         # Space of possible actions as specified by Directions Enum
         self.action_space = Discrete(4)
@@ -71,7 +71,7 @@ class SnakeEnv(gym.Env):
 
     def _get_obs(self):
         """Get the current observation."""
-        board = np.full((self.height, self.width), fill_value=Board.BLANK)
+        board = np.full(self.observation_space.shape, fill_value=Board.BLANK)
         board[self.fruit] = Board.FRUIT
         board[self.snake[0]] = Board.SNAKE_HEAD
         for position in self.snake[1:]:
@@ -103,8 +103,9 @@ class SnakeEnv(gym.Env):
         done = collision
 
         eat = new_position == self.fruit
-        reward = int(eat)
+        reward = -100 if collision else int(eat)
 
+        # Update position
         if not collision:
             self.void.remove(new_position)
             if not eat:
@@ -134,7 +135,7 @@ class SnakeEnv(gym.Env):
         outfile = StringIO() if mode == 'ansi' else sys.stdout
 
         out = self._get_obs().tolist()
-        out = [[self.COLOR_MAPPING[c] for c in line] for line in out]
+        out = [[self.COLOR_MAPPING[c[0]] for c in line] for line in out]
 
         clear = "\n" * 100
         outfile.write(clear + "\n".join(
